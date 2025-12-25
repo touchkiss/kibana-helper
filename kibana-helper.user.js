@@ -41,6 +41,31 @@
             text-decoration: underline !important;
             cursor: pointer !important;
         }
+        
+        /* Karmada 命令按钮样式 */
+        .karmada-cmd-btn {
+            margin-left: 8px !important;
+            padding: 2px 8px !important;
+            background-color: #0066cc !important;
+            color: white !important;
+            border: none !important;
+            border-radius: 3px !important;
+            cursor: pointer !important;
+            font-size: 12px !important;
+            transition: background-color 0.2s !important;
+        }
+        
+        .karmada-cmd-btn:hover {
+            background-color: #0052a3 !important;
+        }
+        
+        .karmada-cmd-btn:active {
+            background-color: #004080 !important;
+        }
+        
+        .karmada-cmd-btn.copied {
+            background-color: #28a745 !important;
+        }
     `);
 
     // 获取列索引映射
@@ -180,12 +205,11 @@
                 const text = messageCell.textContent || messageCell.innerText;
                 const html = messageCell.innerHTML;
                 
-                // 匹配error和exception关键字（不区分大小写）
+                // 匹配error和exception关键字(不区分大小写)
                 const regex = /(error|exception)/gi;
                 if (regex.test(text)) {
-                    // 替换匹配的内容，添加高亮样式
-                    const highlightedHtml = html.replace(regex, '<span class="error-highlight">$1</span>');
-                    messageCell.innerHTML = highlightedHtml;
+                    // 替换匹配的内容,添加高亮样式
+                    messageCell.innerHTML = html.replace(regex, '<span class="error-highlight">$1</span>');
                     // 标记为已处理
                     messageCell.dataset.errorHighlighted = 'true';
                 }
@@ -403,17 +427,34 @@
             paramsPart = hash.substring(questionMarkIndex + 1);
         }
 
-        // 提取 index 参数
+        // 提取 index 参数 (从 _a 参数的外层提取,不是从 filters 的 meta 中提取)
         let indexValue = '';
         const aIndex = paramsPart.indexOf('_a=');
         if (aIndex !== -1) {
             const aValueStart = aIndex + 3;
             if (paramsPart[aValueStart] === '(') {
                 const aParamFull = extractRisonValue(paramsPart, aValueStart);
-                // 提取 index 值
-                const indexMatch = aParamFull.match(/index:([^,)]+)/);
+
+                // 使用更精确的方式:找到顶层的 index 字段
+                // 1. 先尝试匹配带单引号的 index
+                let indexMatch = aParamFull.match(/,index:'([^']+)'/);
                 if (indexMatch) {
-                    indexValue = indexMatch[1].replace(/'/g, '');
+                    indexValue = indexMatch[1];
+                } else {
+                    // 2. 尝试匹配不带引号的 index (紧跟在逗号后面,不在嵌套括号内)
+                    // 排除在 filters:!(...) 或 meta:(...) 内的 index
+                    const parts = aParamFull.split(',');
+                    for (let i = 0; i < parts.length; i++) {
+                        const part = parts[i];
+                        // 检查是否是顶层的 index 字段 (不在括号嵌套中,或者在 _a 的直接子级)
+                        if (part.includes('index:') && !part.includes('meta:') && !part.includes('filters:')) {
+                            const match = part.match(/index:([^,)]+)/);
+                            if (match) {
+                                indexValue = match[1].replace(/'/g, '');
+                                break;
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -448,12 +489,81 @@
         cell.dataset.idProcessed = 'true';
     }
 
+    // 5. Karmada 命令生成功能
+    function addKarmadaCommandButtons() {
+        // 查找文档详情面板中的 service.node.name 字段
+        const docDetails = document.querySelectorAll('[data-test-subj="docTableDetailsRow"]');
+
+        docDetails.forEach(row => {
+            // 查找 orchestrator.cluster.name 字段
+            const clusterNameCell = row.querySelector('[data-test-subj="tableDocViewRow-orchestrator.cluster.name-value"]');
+            const serviceNodeNameCell = row.querySelector('[data-test-subj="tableDocViewRow-service.node.name-value"]');
+
+            // 如果没有找到相关字段，跳过
+            if (!clusterNameCell || !serviceNodeNameCell) return;
+
+            const clusterName = clusterNameCell.textContent.trim();
+            const serviceNodeName = serviceNodeNameCell.textContent.trim();
+            if (!clusterName || !serviceNodeName) return;
+
+            // 检查是否已经添加过按钮
+            if (serviceNodeNameCell.querySelector('.karmada-cmd-btn')) return;
+
+            // 解析 service.node.name
+            // 格式: namespace.pod-name.container-name
+            const parts = serviceNodeName.split('.');
+            if (parts.length < 3) return; // 格式不正确
+
+            const namespace = parts[0];
+            const podName = parts[1];
+            const containerName = parts[2];
+
+            // 构建 karmadactl 命令
+            const command = `karmadactl exec -it ${podName} -c ${containerName} --operation-scope=members -n ${namespace} --cluster=${clusterName} -- bash`;
+
+            // 创建按钮
+            const button = document.createElement('button');
+            button.className = 'karmada-cmd-btn';
+            button.textContent = '复制 Karmada 命令';
+            button.title = command;
+
+            // 点击按钮时复制命令到剪贴板
+            button.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+
+                try {
+                    await navigator.clipboard.writeText(command);
+
+                    // 显示复制成功的反馈
+                    button.textContent = '已复制!';
+                    button.classList.add('copied');
+
+                    setTimeout(() => {
+                        button.textContent = '复制 Karmada 命令';
+                        button.classList.remove('copied');
+                    }, 2000);
+                } catch (err) {
+                    console.error('复制失败:', err);
+                    button.textContent = '复制失败';
+                    setTimeout(() => {
+                        button.textContent = '复制 Karmada 命令';
+                    }, 2000);
+                }
+            });
+
+            // 将按钮添加到字段值后面
+            serviceNodeNameCell.appendChild(button);
+        });
+    }
+
     // 扫描页面，执行所有功能
     function scanPage() {
         autoExpandLogs();
         highlightLogLevels();
         highlightErrorContent();
         makeIdsClickable();
+        addKarmadaCommandButtons();
     }
 
     // 初始化所有功能

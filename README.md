@@ -4,10 +4,13 @@
 
 [![Version](https://img.shields.io/badge/version-0.2-blue.svg)](https://github.com/yourusername/kibana-helper)
 [![Tampermonkey](https://img.shields.io/badge/Tampermonkey-compatible-brightgreen.svg)](https://www.tampermonkey.net/)
+[![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
-一个强大的 Kibana 用户脚本,用于增强日志查看体验,提供自动展开、智能高亮、快速跳转等实用功能。
+一个强大的 Kibana 用户脚本,用于增强日志查看体验,提供自动展开、智能高亮、快速跳转、Karmada 命令生成等实用功能。
 
-[功能特性](#功能特性) • [安装方法](#安装方法) • [使用指南](#使用指南) • [配置说明](#配置说明) • [常见问题](#常见问题)
+[English](README.md) • [简体中文](README_CN.md)
+
+[功能特性](#-功能特性) • [安装方法](#-安装方法) • [使用指南](#-使用指南) • [配置说明](#️-配置说明) • [常见问题](#-常见问题)
 
 </div>
 
@@ -30,7 +33,11 @@
 - 自动高亮 `error` 和 `exception` 关键字
 - 黄色背景 + 加粗显示
 - 支持大小写不敏感匹配
-- 防重复处理机制,避免显示错误
+- **防重复处理机制**:
+  - 通过 DOM 查询检查是否已存在高亮标记
+  - 通过 `data-error-highlighted` 属性双重校验
+  - URL 变化时自动清理标记并重新处理
+  - 避免重复高亮导致的显示错误
 
 ### 🔗 可点击 ID 快速跳转
 - 支持字段:
@@ -40,12 +47,27 @@
   - 生成时间范围查询(当前时间 ±35 秒)
   - 构建 Kuery 查询条件
   - 在新标签页打开,查看完整请求日志链路
-- 智能保留当前 index 配置
+  - **自动清空 filters**: 只保留时间和查询条件,查询完整日志
+  - **智能提取 index**: 从 `_a` 参数的外层提取正确的 index 配置
+
+### 🚀 Karmada 命令生成 (NEW!)
+- 在日志详情面板的 `service.node.name` 字段旁自动添加按钮
+- 一键生成 `karmadactl exec` 命令
+- 自动解析字段:
+  - `orchestrator.cluster.name` → 集群名称
+  - `service.node.name` → namespace.pod-name.container-name
+- 命令格式示例:
+  ```bash
+  karmadactl exec -it xxxx-xxxxxx-1 -c streaming --operation-scope=members -n nams --cluster=xxxx-11 -- bash
+  ```
+- 点击按钮自动复制到剪贴板
+- 视觉反馈:复制成功后按钮变绿并显示"已复制!"
 
 ### ⚡ 实时响应
 - 监听 DOM 变化,自动应用功能
 - 支持列调整后自动重新处理
 - 监听 URL 变化,智能刷新
+- **URL 变化时自动重置处理标记**,防止重复处理
 
 ---
 
@@ -93,6 +115,7 @@
 - 自动打开新标签页
 - 查询时间范围: 当前日志时间 ±35 秒
 - 自动构建查询条件
+- **清空 filters,只保留时间和查询条件**
 - 保留当前 index 设置
 - 显示该请求的完整日志链路
 
@@ -104,6 +127,37 @@ request_id: 95481e20-1f43-4849-b071-5dad617ff602
 日志级别: ERROR
 
 点击 request_id 后 -> 跳转到新页面,显示该请求在 08:50:10 - 08:51:20 之间的所有日志
+```
+
+**URL 构建说明:**
+- 自动从当前 URL 的 `_a` 参数外层提取正确的 `index` 值
+- 清空 `filters:!()`,确保查询完整日志链路
+- 示例 URL:
+  ```
+  https://kibana.example.com/s/space/app/discover#/?
+  _g=(filters:!(),refreshInterval:(pause:!t,value:0),time:(from:'2025-12-09T08:50:10.626Z',to:'2025-12-09T08:51:20.626Z'))
+  &_a=(columns:!(message),filters:!(),index:'13de14b0-02f1-11ef-938a-d9ba7bd575b0',interval:auto,query:(language:kuery,query:'request_id%20:%2095481e20-1f43-4849-b071-5dad617ff602'),sort:!(!('@timestamp',desc)))
+  ```
+
+### Karmada 命令生成功能
+
+在 Kibana 日志详情面板中:
+
+1. 点击任意日志行展开详情
+2. 找到 `service.node.name` 字段
+3. 该字段后面会自动出现"复制 Karmada 命令"按钮
+4. 点击按钮自动复制命令到剪贴板
+
+**字段解析规则:**
+- `orchestrator.cluster.name`: xxxx-11 → 集群名
+- `service.node.name`: nams.xxxx-xxxxxx-1.streaming → 
+  - namespace: `nams`
+  - pod: `xxxx-xxxxxx-1`
+  - container: `streaming`
+
+**生成的命令:**
+```bash
+karmadactl exec -it xxxx-xxxxxx-1 -c streaming --operation-scope=members -n nams --cluster=xxxx-11 -- bash
 ```
 
 ---
@@ -121,6 +175,8 @@ request_id: 95481e20-1f43-4849-b071-5dad617ff602
 | 消息内容 | `message`, `log` |
 | 追踪 ID | `trace.id`, `trace id` |
 | 请求 ID | `request_id`, `request.id`, `request id` |
+| 集群名称 | `orchestrator.cluster.name` |
+| 服务节点名 | `service.node.name` |
 
 ### 自定义样式
 
@@ -139,6 +195,12 @@ GM_addStyle(`
         background-color: #ffff00 !important;
         font-weight: bold !important;
     }
+    
+    /* 自定义 Karmada 按钮样式 */
+    .karmada-cmd-btn {
+        background-color: #0066cc !important;
+        color: white !important;
+    }
 `);
 ```
 
@@ -152,26 +214,46 @@ const fromDate = new Date(timestamp.getTime() - 35000); // 当前: -35秒
 const toDate = new Date(timestamp.getTime() + 35000);   // 当前: +35秒
 ```
 
+### 自定义 Karmada 命令模板
+
+可修改 `addKarmadaCommandButtons` 函数中的命令生成逻辑:
+
+```javascript
+// 自定义命令模板
+const command = `karmadactl exec -it ${podName} -c ${containerName} --operation-scope=members -n ${namespace} --cluster=${clusterName} -- bash`;
+```
+
 ---
 
 ## 🔧 技术细节
 
 ### 架构设计
 - **观察者模式**: 使用 MutationObserver 监听 DOM 变化
-- **防重复处理**: 通过 `data-*` 属性和 DOM 查询双重检查
+- **防重复处理**: 
+  - 通过 `data-*` 属性和 DOM 查询双重检查
+  - URL 变化时自动清理处理标记
+  - 避免重复高亮和重复注册事件
 - **URL 监听**: 监听 `popstate` 和 `hashchange` 事件
-- **智能重置**: 列调整时自动清理标记并重新处理
+- **智能重置**: 列调整或 URL 变化时自动清理标记并重新处理
 
 ### 核心功能模块
 ```
-├── getColumnIndexMap()      # 列索引映射
-├── autoExpandLogs()          # 自动展开日志
-├── highlightLogLevels()      # 日志级别高亮
-├── highlightErrorContent()   # 错误内容高亮
-├── makeIdsClickable()        # ID 可点击
-├── extractRisonValue()       # Rison 格式解析
-└── updateRisonKey()          # Rison 参数更新
+├── getColumnIndexMap()           # 列索引映射
+├── autoExpandLogs()              # 自动展开日志
+├── highlightLogLevels()          # 日志级别高亮
+├── highlightErrorContent()       # 错误内容高亮(防重复)
+├── makeIdsClickable()            # ID 可点击(智能提取 index)
+├── addKarmadaCommandButtons()    # Karmada 命令生成
+├── extractRisonValue()           # Rison 格式解析
+├── updateRisonKey()              # Rison 参数更新
+└── handleColumnChange()          # URL 变化处理(重置标记)
 ```
+
+### Rison URL 解析
+脚本支持解析 Kibana 的 Rison 格式 URL:
+- 处理嵌套括号和数组 `!()`
+- 正确提取 `_a` 参数中的 `index` 值
+- 清空 `filters` 参数,确保查询完整日志
 
 ### 浏览器兼容性
 - ✅ Chrome 80+
@@ -194,12 +276,13 @@ const toDate = new Date(timestamp.getTime() + 35000);   // 当前: +35秒
 </details>
 
 <details>
-<summary><b>Q: 高亮功能显示异常?</b></summary>
+<summary><b>Q: 高亮功能显示异常或重复高亮?</b></summary>
 
-**A:** 这可能是因为:
-1. Kibana 页面结构变化
-2. 刷新页面通常可以解决
-3. 如持续出现,请提交 Issue 并附上 Kibana 版本信息
+**A:** 这个问题已经修复:
+1. 脚本现在具有防重复处理机制
+2. URL 变化时会自动重置处理标记
+3. 如仍有问题,刷新页面即可
+4. 如持续出现,请提交 Issue 并附上 Kibana 版本信息
 </details>
 
 <details>
@@ -208,7 +291,26 @@ const toDate = new Date(timestamp.getTime() + 35000);   // 当前: +35秒
 **A:** 可能原因:
 1. 时间范围太短 (±35秒) - 可以修改脚本中的时间范围
 2. ID 字段名称不匹配 - 检查 Kibana 中实际的字段名
-3. Index 配置不正确 - 脚本会自动保留当前 index
+3. Index 配置不正确 - 脚本会自动从 `_a` 参数外层提取正确的 index
+</details>
+
+<details>
+<summary><b>Q: 点击 ID 跳转的 URL 中 index 不对?</b></summary>
+
+**A:** 这个问题已经修复:
+- 脚本现在会从 `_a` 参数的外层提取 index
+- 不再错误地使用 `filters` 中 `meta` 里的 index
+- 跳转链接会自动清空 filters,只保留时间和查询条件
+</details>
+
+<details>
+<summary><b>Q: Karmada 命令按钮不显示?</b></summary>
+
+**A:** 请确认:
+1. 日志中包含 `orchestrator.cluster.name` 和 `service.node.name` 字段
+2. `service.node.name` 格式正确: `namespace.pod-name.container-name`
+3. 已展开日志详情面板
+4. 刷新页面重试
 </details>
 
 <details>
@@ -219,8 +321,9 @@ const toDate = new Date(timestamp.getTime() + 35000);   // 当前: +35秒
 function scanPage() {
     autoExpandLogs();
     highlightLogLevels();
-    // highlightErrorContent();  // 禁用错误内容高亮
+    // highlightErrorContent();       // 禁用错误内容高亮
     makeIdsClickable();
+    // addKarmadaCommandButtons();    // 禁用 Karmada 命令生成
 }
 ```
 </details>
@@ -235,10 +338,51 @@ function scanPage() {
 如在其他版本遇到问题,欢迎提交 Issue。
 </details>
 
+---
+
+## 📝 更新日志
+
+### v0.2 (当前版本)
+- ✨ 新增: Karmada 命令生成功能
+- 🐛 修复: ID 跳转时 index 提取不正确的问题
+- 🐛 修复: 跳转链接现在自动清空 filters
+- 🐛 修复: 错误内容高亮重复处理导致的显示错误
+- 🔧 改进: URL 变化时自动重置处理标记
+- 🔧 改进: 更完善的防重复处理机制
+
+### v0.1
+- 🎉 初始版本发布
+- ✨ 自动展开日志
+- ✨ 日志级别高亮
+- ✨ 错误内容高亮
+- ✨ 可点击 ID 快速跳转
+
+---
+
+## 🤝 贡献
+
+欢迎提交 Issue 和 Pull Request!
+
+### 开发指南
+1. Fork 本仓库
+2. 创建特性分支: `git checkout -b feature/AmazingFeature`
+3. 提交更改: `git commit -m 'Add some AmazingFeature'`
+4. 推送到分支: `git push origin feature/AmazingFeature`
+5. 提交 Pull Request
+
+---
+
+## 📄 许可证
+
+本项目采用 MIT 许可证 - 详见 [LICENSE](LICENSE) 文件
+
+---
 
 <div align="center">
 
 **如果这个项目对你有帮助,请给个 ⭐️ Star 支持一下!**
+
+Made with ❤️ by developers, for developers
 
 </div>
 
