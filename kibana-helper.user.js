@@ -498,6 +498,27 @@
             // 查找 orchestrator.cluster.name 字段
             const clusterNameCell = row.querySelector('[data-test-subj="tableDocViewRow-orchestrator.cluster.name-value"]');
             const serviceNodeNameCell = row.querySelector('[data-test-subj="tableDocViewRow-service.node.name-value"]');
+            const requestIdCell = row.querySelector('[data-test-subj="tableDocViewRow-request_id-value"]');
+            const traceIdCell = row.querySelector('[data-test-subj="tableDocViewRow-trace.id-value"]');
+            const timestampCell = row.querySelector('[data-test-subj="tableDocViewRow-@timestamp-value"]');
+
+            // 按request_id、trace.id搜索
+            if (timestampCell) {
+                const timestampStr = timestampCell ? (timestampCell.textContent || timestampCell.innerText) : null;
+                const timestamp = timestampStr ? parseKibanaTimestamp(timestampStr) : null;
+                if (requestIdCell && !requestIdCell.dataset.idProcessed) {
+                    const requestId = requestIdCell.textContent || requestIdCell.innerText;
+                    if (requestId) {
+                        makeIdLink(requestIdCell, requestId, timestamp, 'request_id');
+                    }
+                }
+                if (traceIdCell && !traceIdCell.dataset.idProcessed) {
+                    const traceId = traceIdCell.textContent || traceIdCell.innerText;
+                    if (traceId) {
+                        makeIdLink(traceIdCell, traceId, timestamp, 'trace.id');
+                    }
+                }
+            }
 
             // 如果没有找到相关字段，跳过
             if (!clusterNameCell || !serviceNodeNameCell) return;
@@ -522,13 +543,13 @@
             const command = `karmadactl exec -it ${podName} -c ${containerName} --operation-scope=members -n ${namespace} --cluster=${clusterName} -- bash`;
 
             // 创建按钮
-            const button = document.createElement('button');
-            button.className = 'karmada-cmd-btn';
-            button.textContent = '复制 Karmada 命令';
-            button.title = command;
+            const copyKarmadaCommandButton = document.createElement('button');
+            copyKarmadaCommandButton.className = 'karmada-cmd-btn';
+            copyKarmadaCommandButton.textContent = '复制 Karmada 命令';
+            copyKarmadaCommandButton.title = command;
 
             // 点击按钮时复制命令到剪贴板
-            button.addEventListener('click', async (e) => {
+            copyKarmadaCommandButton.addEventListener('click', async (e) => {
                 e.preventDefault();
                 e.stopPropagation();
 
@@ -536,24 +557,24 @@
                     await navigator.clipboard.writeText(command);
 
                     // 显示复制成功的反馈
-                    button.textContent = '已复制!';
-                    button.classList.add('copied');
+                    copyKarmadaCommandButton.textContent = '已复制!';
+                    copyKarmadaCommandButton.classList.add('copied');
 
                     setTimeout(() => {
-                        button.textContent = '复制 Karmada 命令';
-                        button.classList.remove('copied');
+                        copyKarmadaCommandButton.textContent = '复制 Karmada 命令';
+                        copyKarmadaCommandButton.classList.remove('copied');
                     }, 2000);
                 } catch (err) {
                     console.error('复制失败:', err);
-                    button.textContent = '复制失败';
+                    copyKarmadaCommandButton.textContent = '复制失败';
                     setTimeout(() => {
-                        button.textContent = '复制 Karmada 命令';
+                        copyKarmadaCommandButton.textContent = '复制 Karmada 命令';
                     }, 2000);
                 }
             });
 
             // 将按钮添加到字段值后面
-            serviceNodeNameCell.appendChild(button);
+            serviceNodeNameCell.appendChild(copyKarmadaCommandButton);
         });
     }
 
