@@ -4,7 +4,6 @@
 // @version      0.2
 // @description  Enhance Kibana page with auto-expand logs, clickable IDs, and highlight features
 // @author       You
-// @match        *://*/app/kibana/*
 // @match        *://*kibana*/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        GM_addStyle
