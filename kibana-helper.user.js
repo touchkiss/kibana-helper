@@ -1,16 +1,19 @@
 // ==UserScript==
 // @name         Kibana Helper
 // @namespace    http://tampermonkey.net/
-// @version      0.2
+// @version      0.3
 // @description  Enhance Kibana page with auto-expand logs, clickable IDs, and highlight features
 // @author       You
 // @match        *://*kibana*/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        GM_addStyle
 // @grant        GM_addElement
+// @grant        GM_getValue
+// @grant        GM_setValue
+// @grant        GM_registerMenuCommand
 // ==/UserScript==
 
-(function() {
+(function () {
     'use strict';
 
     // 添加CSS样式
@@ -65,7 +68,256 @@
         .karmada-cmd-btn.copied {
             background-color: #28a745 !important;
         }
+        
+        /* 配置弹窗样式 */
+        .kibana-helper-overlay {
+            position: fixed !important;
+            top: 0 !important;
+            left: 0 !important;
+            width: 100% !important;
+            height: 100% !important;
+            background-color: rgba(0, 0, 0, 0.5) !important;
+            z-index: 999999 !important;
+            display: flex !important;
+            justify-content: center !important;
+            align-items: center !important;
+        }
+        
+        .kibana-helper-modal {
+            background-color: #1d1e24 !important;
+            border-radius: 8px !important;
+            padding: 24px !important;
+            min-width: 450px !important;
+            max-width: 600px !important;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3) !important;
+            color: #dfe5ef !important;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif !important;
+        }
+        
+        .kibana-helper-modal h2 {
+            margin: 0 0 16px 0 !important;
+            font-size: 18px !important;
+            font-weight: 600 !important;
+            color: #fff !important;
+        }
+        
+        .kibana-helper-modal label {
+            display: block !important;
+            margin-bottom: 8px !important;
+            font-size: 14px !important;
+            color: #98a2b3 !important;
+        }
+        
+        .kibana-helper-modal textarea {
+            width: 100% !important;
+            min-height: 120px !important;
+            padding: 12px !important;
+            border: 1px solid #343741 !important;
+            border-radius: 4px !important;
+            background-color: #16171c !important;
+            color: #dfe5ef !important;
+            font-size: 14px !important;
+            font-family: monospace !important;
+            resize: vertical !important;
+            box-sizing: border-box !important;
+        }
+        
+        .kibana-helper-modal textarea:focus {
+            outline: none !important;
+            border-color: #0077cc !important;
+        }
+        
+        .kibana-helper-modal .hint {
+            margin-top: 8px !important;
+            font-size: 12px !important;
+            color: #69707d !important;
+        }
+        
+        .kibana-helper-modal .button-group {
+            margin-top: 20px !important;
+            display: flex !important;
+            justify-content: flex-end !important;
+            gap: 12px !important;
+        }
+        
+        .kibana-helper-modal button {
+            padding: 8px 16px !important;
+            border: none !important;
+            border-radius: 4px !important;
+            cursor: pointer !important;
+            font-size: 14px !important;
+            transition: background-color 0.2s !important;
+        }
+        
+        .kibana-helper-modal .btn-cancel {
+            background-color: #343741 !important;
+            color: #dfe5ef !important;
+        }
+        
+        .kibana-helper-modal .btn-cancel:hover {
+            background-color: #404553 !important;
+        }
+        
+        .kibana-helper-modal .btn-save {
+            background-color: #0077cc !important;
+            color: #fff !important;
+        }
+        
+        .kibana-helper-modal .btn-save:hover {
+            background-color: #005fa3 !important;
+        }
+        
+        .kibana-helper-settings-btn {
+            position: fixed !important;
+            bottom: 20px !important;
+            right: 20px !important;
+            width: 48px !important;
+            height: 48px !important;
+            border-radius: 50% !important;
+            background-color: #0077cc !important;
+            color: #fff !important;
+            border: none !important;
+            cursor: pointer !important;
+            font-size: 20px !important;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.3) !important;
+            z-index: 99999 !important;
+            transition: background-color 0.2s, transform 0.2s !important;
+        }
+        
+        .kibana-helper-settings-btn:hover {
+            background-color: #005fa3 !important;
+            transform: scale(1.1) !important;
+        }
     `);
+
+    // ========== 错误关键字配置管理 ==========
+    const CONFIG_KEY = 'kibana_helper_error_keywords';
+    const DEFAULT_KEYWORDS = ['error', 'exception'];
+
+    // 获取保存的关键字配置
+    function getErrorKeywords() {
+        const saved = GM_getValue(CONFIG_KEY, null);
+        if (saved === null) {
+            return DEFAULT_KEYWORDS;
+        }
+        try {
+            const keywords = JSON.parse(saved);
+            return Array.isArray(keywords) && keywords.length > 0 ? keywords : DEFAULT_KEYWORDS;
+        } catch (e) {
+            return DEFAULT_KEYWORDS;
+        }
+    }
+
+    // 保存关键字配置
+    function saveErrorKeywords(keywords) {
+        GM_setValue(CONFIG_KEY, JSON.stringify(keywords));
+    }
+
+    // 显示配置弹窗
+    function showConfigModal() {
+        // 如果已经存在弹窗，先移除
+        const existingOverlay = document.querySelector('.kibana-helper-overlay');
+        if (existingOverlay) {
+            existingOverlay.remove();
+        }
+
+        const currentKeywords = getErrorKeywords();
+
+        // 创建遮罩层
+        const overlay = document.createElement('div');
+        overlay.className = 'kibana-helper-overlay';
+
+        // 创建弹窗
+        const modal = document.createElement('div');
+        modal.className = 'kibana-helper-modal';
+        modal.innerHTML = `
+            <h2>错误内容高亮配置</h2>
+            <label for="error-keywords">要高亮的关键字（每行一个）：</label>
+            <textarea id="error-keywords" placeholder="error&#10;exception&#10;failed">${currentKeywords.join('\n')}</textarea>
+            <div class="hint">输入要高亮的关键字，每行一个。匹配不区分大小写。</div>
+            <div class="button-group">
+                <button class="btn-cancel">取消</button>
+                <button class="btn-save">保存</button>
+            </div>
+        `;
+
+        overlay.appendChild(modal);
+        document.body.appendChild(overlay);
+
+        // 绑定事件
+        const textarea = modal.querySelector('#error-keywords');
+        const cancelBtn = modal.querySelector('.btn-cancel');
+        const saveBtn = modal.querySelector('.btn-save');
+
+        // 点击遮罩层关闭
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.remove();
+            }
+        });
+
+        // 取消按钮
+        cancelBtn.addEventListener('click', () => {
+            overlay.remove();
+        });
+
+        // 保存按钮
+        saveBtn.addEventListener('click', () => {
+            const text = textarea.value.trim();
+            const keywords = text.split('\n')
+                .map(k => k.trim())
+                .filter(k => k.length > 0);
+
+            if (keywords.length === 0) {
+                alert('请至少输入一个关键字');
+                return;
+            }
+
+            saveErrorKeywords(keywords);
+
+            // 重置已处理标记，让高亮功能重新执行
+            document.querySelectorAll('[data-error-highlighted]').forEach(el => {
+                // 移除高亮span，恢复原始文本
+                el.innerHTML = el.textContent;
+                delete el.dataset.errorHighlighted;
+            });
+
+            overlay.remove();
+
+            // 重新执行高亮
+            highlightErrorContent();
+        });
+
+        // ESC 键关闭
+        const handleEsc = (e) => {
+            if (e.key === 'Escape') {
+                overlay.remove();
+                document.removeEventListener('keydown', handleEsc);
+            }
+        };
+        document.addEventListener('keydown', handleEsc);
+
+        // 聚焦到文本框
+        textarea.focus();
+    }
+
+    // 添加设置按钮到页面
+    function addSettingsButton() {
+        // 避免重复添加
+        if (document.querySelector('.kibana-helper-settings-btn')) {
+            return;
+        }
+
+        const btn = document.createElement('button');
+        btn.className = 'kibana-helper-settings-btn';
+        btn.innerHTML = '⚙';
+        btn.title = 'Kibana Helper 设置';
+        btn.addEventListener('click', showConfigModal);
+        document.body.appendChild(btn);
+    }
+
+    // 注册油猴菜单命令
+    GM_registerMenuCommand('配置错误关键字', showConfigModal);
 
     // 获取列索引映射
     function getColumnIndexMap() {
@@ -77,18 +329,18 @@
         if (headers.length === 0) {
             headers = document.querySelectorAll('[data-test-subj="header-cell"]');
         }
-        
+
         const indexMap = {};
-        
+
         headers.forEach((header, index) => {
             const text = header.textContent || header.innerText;
             if (text) {
                 // 提取列名，处理不同格式
                 let columnName = text.trim().toLowerCase();
-                
+
                 // 处理常见的列名格式
                 indexMap[columnName] = index;
-                
+
                 // 特殊处理trace.id和request_id
                 if (columnName.includes('trace') && columnName.includes('id')) {
                     indexMap['trace.id'] = index;
@@ -97,24 +349,24 @@
                     indexMap['request_id'] = index;
                     indexMap['request.id'] = index; // 支持点号格式
                 }
-                
+
                 // 处理@timestamp
                 if (columnName.includes('@timestamp') || columnName.includes('timestamp')) {
                     indexMap['@timestamp'] = index;
                 }
-                
+
                 // 处理message
                 if (columnName.includes('message')) {
                     indexMap['message'] = index;
                 }
-                
+
                 // 处理log.level
                 if (columnName.includes('log') && columnName.includes('level')) {
                     indexMap['log.level'] = index;
                 }
             }
         });
-        
+
         return indexMap;
     }
 
@@ -129,7 +381,7 @@
         }
         return rows;
     }
-    
+
     // 获取日志字段的辅助函数
     function getLogFields(row) {
         let fields = row.querySelectorAll('[data-test-subj="docTableField"]');
@@ -156,18 +408,18 @@
     function highlightLogLevels() {
         const indexMap = getColumnIndexMap();
         const logLevelIndex = indexMap['log.level'];
-        
+
         if (logLevelIndex === undefined) return;
-        
+
         const logRows = getLogRows();
         logRows.forEach(row => {
             const cells = getLogFields(row);
             if (cells[logLevelIndex]) {
                 const logLevel = cells[logLevelIndex].textContent || cells[logLevelIndex].innerText;
-                
+
                 // 移除之前的高亮类
                 row.classList.remove('log-level-error', 'log-level-warn');
-                
+
                 // 添加新的高亮类
                 if (logLevel.includes('ERROR')) {
                     row.classList.add('log-level-error');
@@ -182,14 +434,14 @@
     function highlightErrorContent() {
         const indexMap = getColumnIndexMap();
         const messageIndex = indexMap['message'] || indexMap['log'];
-        
+
         if (messageIndex === undefined) return;
-        
+
         const logRows = getLogRows();
         logRows.forEach(row => {
             const cells = getLogFields(row);
             const messageCell = cells[messageIndex];
-            
+
             if (messageCell) {
                 // 检查是否已经包含高亮标记,避免重复处理
                 if (messageCell.querySelector('.error-highlight')) {
@@ -202,11 +454,17 @@
                 }
 
                 const text = messageCell.textContent || messageCell.innerText;
-                const html = messageCell.innerHTML;
-                
-                // 匹配error和exception关键字(不区分大小写)
-                const regex = /(error|exception)/gi;
+                let html = messageCell.innerHTML;
+
+                // 获取用户配置的关键字
+                const keywords = getErrorKeywords();
+                // 转义正则特殊字符
+                const escapedKeywords = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                const regex = new RegExp(`(${escapedKeywords.join('|')})`, 'gi');
+
                 if (regex.test(text)) {
+                    // 重置正则的 lastIndex
+                    regex.lastIndex = 0;
                     // 替换匹配的内容,添加高亮样式
                     messageCell.innerHTML = html.replace(regex, '<span class="error-highlight">$1</span>');
                     // 标记为已处理
@@ -234,20 +492,20 @@
         const traceIdIndex = indexMap['trace.id'];
         const requestIdIndex = indexMap['request_id'];
         const timestampIndex = indexMap['@timestamp'];
-        
+
         if ((traceIdIndex === undefined && requestIdIndex === undefined) || timestampIndex === undefined) {
             return;
         }
-        
+
         const logRows = getLogRows();
         logRows.forEach(row => {
             const cells = getLogFields(row);
-            
+
             // 获取时间戳
             const timestampCell = cells[timestampIndex];
             const timestampStr = timestampCell ? (timestampCell.textContent || timestampCell.innerText) : null;
             const timestamp = timestampStr ? parseKibanaTimestamp(timestampStr) : null;
-            
+
             // 处理trace.id列
             if (traceIdIndex !== undefined) {
                 const traceIdCell = cells[traceIdIndex];
@@ -258,7 +516,7 @@
                     }
                 }
             }
-            
+
             // 处理request_id列
             if (requestIdIndex !== undefined) {
                 const requestIdCell = cells[requestIdIndex];
@@ -271,7 +529,7 @@
             }
         });
     }
-    
+
     // 提取完整的 Rison 参数值（处理嵌套括号和数组）
     function extractRisonValue(str, startPos) {
         let depth = 0;
@@ -396,7 +654,7 @@
     function makeIdLink(cell, idValue, timestamp, fieldName) {
         // 构建查询URL
         const currentUrl = window.location.href;
-        
+
         // 计算时间范围
         let timeFrom = '';
         let timeTo = '';
@@ -410,7 +668,7 @@
 
         // 构建查询条件，使用Kibana Kuery语法
         const query = `${fieldName} : ${idValue}`;
-        
+
         // 解析当前URL
         const urlParts = currentUrl.split('#');
         const baseUrl = urlParts[0];
@@ -472,18 +730,18 @@
         // 重新构建完整的 URL
         const newHash = `${pathPart}_g=${gParam}&_a=${aParam}`;
         const newUrl = `${baseUrl}#${newHash}`;
-        
+
         // 创建链接元素
         const link = document.createElement('a');
         link.href = newUrl;
         link.target = '_blank';
         link.className = 'clickable-id';
         link.textContent = idValue;
-        
+
         // 替换单元格内容
         cell.innerHTML = '';
         cell.appendChild(link);
-        
+
         // 标记为已处理
         cell.dataset.idProcessed = 'true';
     }
@@ -579,6 +837,7 @@
 
     // 扫描页面，执行所有功能
     function scanPage() {
+        addSettingsButton();
         autoExpandLogs();
         highlightLogLevels();
         highlightErrorContent();
@@ -590,11 +849,11 @@
     function init() {
         // 立即执行一次
         scanPage();
-        
+
         // 监听DOM变化
         const observer = new MutationObserver((mutations) => {
             let shouldRescan = false;
-            
+
             // 检查是否有表头变化（列调整）
             mutations.forEach(mutation => {
                 if (mutation.type === 'childList') {
@@ -604,13 +863,13 @@
                     }) || Array.from(mutation.removedNodes).some(node => {
                         return node.matches && (node.matches('[data-test-subj*="header"]') || node.matches('[data-test-subj*="field"]'));
                     });
-                    
+
                     if (hasHeaderChanges) {
                         shouldRescan = true;
                     }
                 }
             });
-            
+
             if (shouldRescan) {
                 // 重置处理标记，重新处理所有元素
                 document.querySelectorAll('[data-error-highlighted], [data-id-processed]').forEach(el => {
@@ -618,15 +877,15 @@
                     delete el.dataset.idProcessed;
                 });
             }
-            
+
             scanPage();
         });
-        
+
         observer.observe(document.body, {
             childList: true,
             subtree: true
         });
-        
+
         // 监听URL变化，当调整显示的列时重新初始化
         let currentUrl = window.location.href;
         window.addEventListener('popstate', () => {
@@ -635,7 +894,7 @@
                 handleColumnChange();
             }
         });
-        
+
         // 监听hash变化
         window.addEventListener('hashchange', () => {
             if (window.location.href !== currentUrl) {
@@ -643,7 +902,7 @@
                 handleColumnChange();
             }
         });
-        
+
         // 监听可能的列调整事件
         const refreshBtn = document.querySelector('[data-test-subj="refresh-button"]');
         if (refreshBtn) {
@@ -652,22 +911,22 @@
                 setTimeout(handleColumnChange, 1000);
             });
         }
-        
+
         // 监听列选择器按钮点击
         document.addEventListener('click', (e) => {
             // 检查是否点击了列选择器相关按钮
-            const columnSelector = e.target.closest('[data-test-subj*="column"]') || 
-                                  e.target.closest('[data-test-subj*="field"]') || 
-                                  e.target.closest('[aria-label*="column"]') ||
-                                  e.target.closest('[aria-label*="field"]');
-            
+            const columnSelector = e.target.closest('[data-test-subj*="column"]') ||
+                e.target.closest('[data-test-subj*="field"]') ||
+                e.target.closest('[aria-label*="column"]') ||
+                e.target.closest('[aria-label*="field"]');
+
             if (columnSelector) {
                 // 延迟执行，确保DOM已更新
                 setTimeout(handleColumnChange, 500);
             }
         });
     }
-    
+
     // 处理列变化的通用函数
     function handleColumnChange() {
         // 延迟执行，确保DOM已更新

@@ -2,7 +2,7 @@
 
 <div align="center">
 
-[![Version](https://img.shields.io/badge/version-0.2-blue.svg)](https://github.com/yourusername/kibana-helper)
+[![Version](https://img.shields.io/badge/version-0.3-blue.svg)](https://github.com/yourusername/kibana-helper)
 [![Tampermonkey](https://img.shields.io/badge/Tampermonkey-compatible-brightgreen.svg)](https://www.tampermonkey.net/)
 [![License](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
 
@@ -30,9 +30,12 @@
 - 快速识别关键日志信息
 
 #### 错误内容高亮
-- 自动高亮 `error` 和 `exception` 关键字
+- **可配置关键字**: 默认高亮 `error` 和 `exception`，可通过弹窗自定义
 - 黄色背景 + 加粗显示
 - 支持大小写不敏感匹配
+- **配置入口**:
+  - 页面右下角⚙️设置按钮
+  - 油猴扩展菜单命令
 - **防重复处理机制**:
   - 通过 DOM 查询检查是否已存在高亮标记
   - 通过 `data-error-highlighted` 属性双重校验
@@ -106,8 +109,9 @@
 
 1. **日志自动展开** - 所有日志内容自动完整显示
 2. **日志级别高亮** - ERROR 和 WARN 级别的日志会被自动高亮
-3. **错误关键字高亮** - `error` 和 `exception` 关键字会被黄色高亮
+3. **错误关键字高亮** - 默认高亮 `error` 和 `exception`，可自定义
 4. **ID 可点击** - `trace.id` 和 `request_id` 字段变成可点击的蓝色链接
+5. **设置按钮** - 页面右下角显示⚙️设置按钮，可配置错误关键字
 
 ### 快速跳转功能
 
@@ -161,6 +165,28 @@ karmadactl exec -it xxxx-xxxxxx-1 -c streaming --operation-scope=members -n nams
 ```
 
 ---
+
+### 错误关键字配置
+
+你可以自定义要高亮的错误关键字：
+
+1. **方式一**: 点击页面右下角的⚙️设置按钮
+2. **方式二**: 点击油猴扩展图标 → 找到“配置错误关键字”菜单项
+
+**配置说明:**
+- 每行输入一个关键字
+- 匹配不区分大小写
+- 保存后立即生效
+- 配置会永久保存在浏览器本地
+
+**示例配置:**
+```
+error
+exception
+failed
+timeout
+connection refused
+```
 
 ## ⚙️ 配置说明
 
@@ -241,12 +267,16 @@ const command = `karmadactl exec -it ${podName} -c ${containerName} --operation-
 ├── getColumnIndexMap()           # 列索引映射
 ├── autoExpandLogs()              # 自动展开日志
 ├── highlightLogLevels()          # 日志级别高亮
-├── highlightErrorContent()       # 错误内容高亮(防重复)
+├── highlightErrorContent()       # 错误内容高亮(支持配置)
 ├── makeIdsClickable()            # ID 可点击(智能提取 index)
 ├── addKarmadaCommandButtons()    # Karmada 命令生成
 ├── extractRisonValue()           # Rison 格式解析
 ├── updateRisonKey()              # Rison 参数更新
-└── handleColumnChange()          # URL 变化处理(重置标记)
+├── handleColumnChange()          # URL 变化处理(重置标记)
+├── getErrorKeywords()            # 获取配置的错误关键字
+├── saveErrorKeywords()           # 保存错误关键字配置
+├── showConfigModal()             # 显示配置弹窗
+└── addSettingsButton()           # 添加设置按钮
 ```
 
 ### Rison URL 解析
@@ -342,7 +372,14 @@ function scanPage() {
 
 ## 📝 更新日志
 
-### v0.2 (当前版本)
+### v0.3 (当前版本)
+- ✨ 新增: **错误关键字可配置功能**
+  - 页面右下角⚙️设置按钮
+  - 油猴扩展菜单命令
+  - 配置永久保存
+- 🔧 改进: 错误关键字支持正则特殊字符转义
+
+### v0.2
 - ✨ 新增: Karmada 命令生成功能
 - 🐛 修复: ID 跳转时 index 提取不正确的问题
 - 🐛 修复: 跳转链接现在自动清空 filters
