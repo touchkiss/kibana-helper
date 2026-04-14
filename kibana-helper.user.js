@@ -33,7 +33,6 @@
         .error-highlight {
             background-color: #ffff00 !important;
             font-weight: bold !important;
-            padding: 2px 4px !important;
             border-radius: 3px !important;
         }
         
@@ -192,7 +191,7 @@
 
     // ========== 错误关键字配置管理 ==========
     const CONFIG_KEY = 'kibana_helper_error_keywords';
-    const DEFAULT_KEYWORDS = ['error', 'exception'];
+    const DEFAULT_KEYWORDS = ['/\b[a-zA-Z]*Error[a-zA-Z]*\b/', '/\b[a-zA-Z]*Exception[a-zA-Z]*\b/', '错误', '异常', '失败'];
 
     // 获取保存的关键字配置
     function getErrorKeywords() {
@@ -458,8 +457,13 @@
 
                 // 获取用户配置的关键字
                 const keywords = getErrorKeywords();
-                // 转义正则特殊字符
-                const escapedKeywords = keywords.map(k => k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+                // 转义正则特殊字符，支持通过 /.../ 编写正则
+                const escapedKeywords = keywords.map(k => {
+                    if (k.startsWith('/') && k.endsWith('/')) {
+                        return k.slice(1, -1);
+                    }
+                    return k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                });
                 const regex = new RegExp(`(${escapedKeywords.join('|')})`, 'gi');
 
                 if (regex.test(text)) {
