@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net/
 // @version      0.3
 // @description  Enhance Kibana page with auto-expand logs, clickable IDs, and highlight features
-// @author       You
+// @author       necksas.liu
 // @match        *://*kibana*/*
 // @icon         data:image/gif;base64,R0lGODlhAQABAAAAACH5BAEKAAEALAAAAAABAAEAAAICTAEAOw==
 // @grant        GM_addStyle
@@ -191,7 +191,7 @@
 
     // ========== 错误关键字配置管理 ==========
     const CONFIG_KEY = 'kibana_helper_error_keywords';
-    const DEFAULT_KEYWORDS = ['/\b[a-zA-Z]*Error[a-zA-Z]*\b/', '/\b[a-zA-Z]*Exception[a-zA-Z]*\b/', '错误', '异常', '失败'];
+    const DEFAULT_KEYWORDS = ['/\b[a-zA-Z]*Error[a-zA-Z]*\b/', '/\b[a-zA-Z]*Exception[a-zA-Z]*\b/', '错误', '异常', '失败', 'timeout'];
 
     // 获取保存的关键字配置
     function getErrorKeywords() {
